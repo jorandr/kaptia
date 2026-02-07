@@ -135,14 +135,18 @@ docker compose exec -T chatwoot_web bundle exec rails db:chatwoot_prepare &>/dev
 print_success "Migraciones completadas"
 
 print_info "Creando cuenta de super administrador..."
+
+# Generar contraseña que cumpla requisitos de Chatwoot (mínimo 1 carácter especial)
+ADMIN_PASSWORD="${POSTGRES_PASSWORD}!2024"
+
 docker compose exec -T chatwoot_web bundle exec rails runner "
 begin
   account = Account.create!(name: '${PROJECT_NAME^}')
   user = User.create!(
     email: 'admin@${DOMAIN}',
     name: 'Administrador',
-    password: '${POSTGRES_PASSWORD}',
-    password_confirmation: '${POSTGRES_PASSWORD}',
+    password: '${ADMIN_PASSWORD}',
+    password_confirmation: '${ADMIN_PASSWORD}',
     confirmed_at: Time.now
   )
   AccountUser.create!(
@@ -160,7 +164,7 @@ print_success "Chatwoot configurado"
 echo ""
 echo -e "${GREEN}Credenciales de Chatwoot:${NC}"
 echo -e "  Email: ${YELLOW}admin@${DOMAIN}${NC}"
-echo -e "  Password: ${YELLOW}${POSTGRES_PASSWORD}${NC}"
+echo -e "  Password: ${YELLOW}${ADMIN_PASSWORD}${NC}"
 
 # =============================================================================
 # 3. CONFIGURAR BASE DE DATOS
