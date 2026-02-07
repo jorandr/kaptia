@@ -35,7 +35,33 @@ services:
       - default
 
   # -------------------------------------------------------
-  # 3. CHATWOOT WEB (Interfaz de Chat/CRM)
+  # 3. CHATWOOT MIGRATIONS (Inicialización de BD)
+  # -------------------------------------------------------
+  chatwoot_migrations:
+    image: chatwoot/chatwoot:latest
+    container_name: ${PROJECT_NAME}_chatwoot_migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - NODE_ENV=production
+      - RAILS_ENV=production
+      - POSTGRES_DATABASE=${CHATWOOT_DATABASE}
+      - POSTGRES_HOST=${PROJECT_NAME}_db
+      - POSTGRES_USERNAME=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
+    command: bundle exec rails db:chatwoot_prepare
+    restart: "no"
+    networks:
+      - default
+
+  # -------------------------------------------------------
+  # 4. CHATWOOT WEB (Interfaz de Chat/CRM)
   # -------------------------------------------------------
   chatwoot_web:
     image: chatwoot/chatwoot:latest
@@ -46,6 +72,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      chatwoot_migrations:
+        condition: service_completed_successfully
     environment:
       - FRONTEND_URL=https://${CHATWOOT_DOMAIN}
       - DEFAULT_LOCALE=${DEFAULT_LOCALE:-es}
@@ -77,7 +105,7 @@ services:
       - default
 
   # -------------------------------------------------------
-  # 4. CHATWOOT WORKER (Procesos de fondo)
+  # 5. CHATWOOT WORKER (Procesos de fondo)
   # -------------------------------------------------------
   chatwoot_worker:
     image: chatwoot/chatwoot:latest
@@ -88,6 +116,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      chatwoot_migrations:
+        condition: service_completed_successfully
     environment:
       - FRONTEND_URL=https://${CHATWOOT_DOMAIN}
       - NODE_ENV=production
@@ -110,7 +140,7 @@ services:
       - default
 
   # -------------------------------------------------------
-  # 5. NOCODB (Interfaz de Base de Datos)
+  # 6. NOCODB (Interfaz de Base de Datos)
   # -------------------------------------------------------
   nocodb:
     image: nocodb/nocodb:latest
@@ -133,7 +163,7 @@ services:
       - default
 
   # -------------------------------------------------------
-  # 6. N8N (Automatización de Workflows)
+  # 7. N8N (Automatización de Workflows)
   # -------------------------------------------------------
   n8n:
     image: n8nio/n8n:latest
@@ -159,7 +189,7 @@ services:
       - default
 
   # -------------------------------------------------------
-  # 7. WAHA (WhatsApp HTTP API)
+  # 8. WAHA (WhatsApp HTTP API)
   # -------------------------------------------------------
   waha:
     image: devlikeapro/waha
