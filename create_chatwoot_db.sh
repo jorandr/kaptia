@@ -57,7 +57,7 @@ print_success "Base de datos ${CHATWOOT_DATABASE} verificada/creada"
 
 # Reiniciar Chatwoot para que se conecte
 print_info "Reiniciando servicios de Chatwoot..."
-docker compose restart chatwoot_web chatwoot_worker chatwoot_sidekiq
+docker compose restart chatwoot_web chatwoot_worker
 
 print_success "Chatwoot reiniciado correctamente"
 
