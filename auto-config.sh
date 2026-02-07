@@ -97,6 +97,20 @@ until docker compose exec -T redis redis-cli ping &>/dev/null; do
 done
 print_success "Redis está listo"
 
+# =============================================================================
+# 1.5 CREAR BASE DE DATOS DE CHATWOOT
+# =============================================================================
+print_info "Verificando y creando base de datos de Chatwoot..."
+
+# Crear la base de datos de Chatwoot si no existe
+docker compose exec -T postgres psql -U ${POSTGRES_USER} -d postgres << EOSQL &>/dev/null || true
+-- Crear la base de datos de Chatwoot si no existe
+SELECT 'CREATE DATABASE ${CHATWOOT_DATABASE}'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${CHATWOOT_DATABASE}')\gexec
+EOSQL
+
+print_success "Base de datos de Chatwoot verificada/creada"
+
 print_info "Esperando a Chatwoot (esto puede tardar 1-2 minutos)..."
 sleep 30
 RETRY_COUNT=0

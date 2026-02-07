@@ -186,6 +186,34 @@ print_info "Verificando estado de los servicios..."
 docker compose ps
 
 # =============================================================================
+# 5.5 CREAR BASE DE DATOS DE CHATWOOT
+# =============================================================================
+print_info "Creando base de datos de Chatwoot..."
+
+# Esperar a que PostgreSQL esté listo
+RETRY_COUNT=0
+until docker compose exec -T postgres pg_isready -U admin &>/dev/null; do
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    if [ $RETRY_COUNT -eq 15 ]; then
+        print_warning "PostgreSQL tardó más de lo esperado en iniciarse"
+        break
+    fi
+    echo -n "."
+    sleep 2
+done
+
+# Crear la base de datos de Chatwoot
+CHATWOOT_DB=$(grep CHATWOOT_DATABASE .env | cut -d '=' -f2)
+CHATWOOT_DB=${CHATWOOT_DB:-chatwoot_production}
+
+docker compose exec -T postgres psql -U admin -d postgres << EOSQL &>/dev/null || true
+SELECT 'CREATE DATABASE $CHATWOOT_DB'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$CHATWOOT_DB')\gexec
+EOSQL
+
+print_success "Base de datos de Chatwoot creada"
+
+# =============================================================================
 # 6. AUTO-CONFIGURACIÓN
 # =============================================================================
 print_header "6. Auto-Configuración de Servicios"
