@@ -73,7 +73,7 @@ print_header "1. Verificando disponibilidad de servicios"
 print_info "Esperando a PostgreSQL..."
 RETRY_COUNT=0
 MAX_RETRIES=30
-until docker-compose exec -T postgres pg_isready -U ${POSTGRES_USER} &>/dev/null; do
+until docker compose exec -T postgres pg_isready -U ${POSTGRES_USER} &>/dev/null; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
         print_error "PostgreSQL no está disponible después de ${MAX_RETRIES} intentos"
@@ -86,7 +86,7 @@ print_success "PostgreSQL está listo"
 
 print_info "Esperando a Redis..."
 RETRY_COUNT=0
-until docker-compose exec -T redis redis-cli ping &>/dev/null; do
+until docker compose exec -T redis redis-cli ping &>/dev/null; do
     RETRY_COUNT=$((RETRY_COUNT + 1))
     if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
         print_error "Redis no está disponible"
@@ -117,11 +117,11 @@ print_success "Chatwoot está listo"
 print_header "2. Configurando Chatwoot"
 
 print_info "Ejecutando migraciones de base de datos..."
-docker-compose exec -T chatwoot_web bundle exec rails db:chatwoot_prepare &>/dev/null || true
+docker compose exec -T chatwoot_web bundle exec rails db:chatwoot_prepare &>/dev/null || true
 print_success "Migraciones completadas"
 
 print_info "Creando cuenta de super administrador..."
-docker-compose exec -T chatwoot_web bundle exec rails runner "
+docker compose exec -T chatwoot_web bundle exec rails runner "
 begin
   account = Account.create!(name: '${PROJECT_NAME^}')
   user = User.create!(
@@ -155,7 +155,7 @@ print_header "3. Configurando estructura de base de datos"
 
 print_info "Creando tablas personalizadas..."
 
-docker-compose exec -T postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} << 'EOSQL' 2>/dev/null || true
+docker compose exec -T postgres psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} << 'EOSQL' 2>/dev/null || true
 
 -- Crear extensión UUID si no existe
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
