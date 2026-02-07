@@ -70,7 +70,7 @@ else
 fi
 
 # Verificar Docker Compose
-if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
+if command -v docker compose &> /dev/null || docker compose version &> /dev/null; then
     print_success "Docker Compose instalado"
 else
     print_error "Docker Compose no está instalado"
@@ -172,10 +172,10 @@ print_success "Directorios creados"
 print_header "5. Iniciando Servicios Docker"
 
 print_info "Descargando imágenes (esto puede tardar unos minutos)..."
-docker-compose pull
+docker compose pull
 
 print_info "Iniciando todos los servicios..."
-docker-compose up -d
+docker compose up -d
 
 # Esperar a que los servicios inicien
 print_info "Esperando a que los servicios inicien..."
@@ -183,7 +183,7 @@ sleep 10
 
 # Verificar estado
 print_info "Verificando estado de los servicios..."
-docker-compose ps
+docker compose ps
 
 # =============================================================================
 # 6. AUTO-CONFIGURACIÓN
@@ -240,13 +240,13 @@ echo ""
 echo -e "${YELLOW}💡 Tip: Las credenciales se guardaron en credentials_${PROJECT_NAME}.txt${NC}"
 echo ""
 echo -e "${GREEN}Para ver los logs:${NC}"
-echo "  docker-compose logs -f"
+echo "  docker compose logs -f"
 echo ""
 echo -e "${GREEN}Para reiniciar servicios:${NC}"
-echo "  docker-compose restart"
+echo "  docker compose restart"
 echo ""
 echo -e "${GREEN}Para detener todo:${NC}"
-echo "  docker-compose down"
+echo "  docker compose down"
 echo ""
 echo -e "${BLUE}═══════════════════════════════════════════════════════${NC}"
 echo ""
