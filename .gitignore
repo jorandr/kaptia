@@ -1,0 +1,42 @@
+# Archivos de entorno
+.env
+.env.local
+.env.*.local
+credentials.txt
+
+# Datos de los servicios
+n8n_data/
+waha_data/
+redis_data/
+
+# Logs
+*.log
+logs/
+
+# Backups
+backups/
+*.sql
+*.dump
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# Docker
+.docker/

@@ -1,0 +1,152 @@
+{
+  "name": "Ejemplo: Captura de Propiedades",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "capture-property",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Recibir URL",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "capture-property"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Procesar y validar datos de la propiedad\nconst data = items[0].json;\n\n// Extraer ID de la URL si está presente\nconst propertyId = data.url?.match(/\\/(\\d+)\\/?$/)?.[1] || null;\n\n// Estructura de datos limpia\nreturn [{\n  json: {\n    property_id: propertyId,\n    url: data.url,\n    title: data.title || 'Sin título',\n    price: data.price || null,\n    description: data.description || '',\n    contact_phone: data.phone || '',\n    contact_email: data.email || '',\n    location: data.location || '',\n    status: 'pending_review',\n    source: data.source || 'manual',\n    scraped_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "process-data",
+      "name": "Procesar Datos",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO properties (property_id, url, title, price, description, contact_phone, contact_email, location, status, source, scraped_at)\nVALUES ('{{ $json.property_id }}', '{{ $json.url }}', '{{ $json.title }}', {{ $json.price }}, '{{ $json.description }}', '{{ $json.contact_phone }}', '{{ $json.contact_email }}', '{{ $json.location }}', '{{ $json.status }}', '{{ $json.source }}', '{{ $json.scraped_at }}')\nRETURNING *;",
+        "additionalFields": {}
+      },
+      "id": "save-to-db",
+      "name": "Guardar en PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $env.PROJECT_NAME }}_whatsapp:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.WAHA_API_KEY_PLAIN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "session",
+              "value": "default"
+            },
+            {
+              "name": "chatId",
+              "value": "NUMERO_DESTINO@c.us"
+            },
+            {
+              "name": "text",
+              "value": "=🏠 Nueva propiedad captada\\n\\n📍 {{ $json.title }}\\n💰 Precio: {{ $json.price }}\\n📞 Contacto: {{ $json.contact_phone }}\\n🔗 {{ $json.url }}\\n\\n✅ Guardada en base de datos"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-whatsapp",
+      "name": "Notificar por WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Propiedad guardada correctamente\", \"property_id\": $json.property_id } }}"
+      },
+      "id": "webhook-response",
+      "name": "Responder al Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Recibir URL": {
+      "main": [
+        [
+          {
+            "node": "Procesar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Datos": {
+      "main": [
+        [
+          {
+            "node": "Guardar en PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Notificar por WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar por WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Responder al Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-29T00:00:00.000Z",
+  "versionId": "1"
+}

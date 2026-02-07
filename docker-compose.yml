@@ -1,0 +1,206 @@
+version: '3.8'
+
+services:
+  # -------------------------------------------------------
+  # 1. BASE DE DATOS POSTGRESQL
+  # -------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: ${PROJECT_NAME}_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------
+  # 2. REDIS (Para Chatwoot)
+  # -------------------------------------------------------
+  redis:
+    image: redis:alpine
+    container_name: ${PROJECT_NAME}_redis
+    restart: always
+    volumes:
+      - redis_data:/data
+    networks:
+      - default
+
+  # -------------------------------------------------------
+  # 3. CHATWOOT WEB (Interfaz de Chat/CRM)
+  # -------------------------------------------------------
+  chatwoot_web:
+    image: chatwoot/chatwoot:latest
+    container_name: ${PROJECT_NAME}_chatwoot_web
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - FRONTEND_URL=https://${CHATWOOT_DOMAIN}
+      - DEFAULT_LOCALE=${DEFAULT_LOCALE:-es}
+      - NODE_ENV=production
+      - RAILS_ENV=production
+      - INSTALLATION_ENV=docker
+      - POSTGRES_DATABASE=${CHATWOOT_DATABASE}
+      - POSTGRES_HOST=${PROJECT_NAME}_db
+      - POSTGRES_USERNAME=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
+      # Configuración WAHA
+      - WAHA_API_URL=http://${PROJECT_NAME}_whatsapp:3000
+      - WAHA_API_KEY=${WAHA_API_KEY_PLAIN}
+      - WAHA_WEBHOOK_URL=https://${CHATWOOT_DOMAIN}/webhooks/whatsapp
+    command: bundle exec rails s -p 3000 -b 0.0.0.0
+    volumes:
+      - chatwoot_data:/app/storage
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME}_chatwoot.rule=Host(`${CHATWOOT_DOMAIN}`)"
+      - "traefik.http.routers.${PROJECT_NAME}_chatwoot.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}_chatwoot.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}_chatwoot.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PROJECT_NAME}_chatwoot.loadbalancer.server.port=3000"
+    networks:
+      - default
+
+  # -------------------------------------------------------
+  # 4. CHATWOOT WORKER (Procesos de fondo)
+  # -------------------------------------------------------
+  chatwoot_worker:
+    image: chatwoot/chatwoot:latest
+    container_name: ${PROJECT_NAME}_chatwoot_worker
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - FRONTEND_URL=https://${CHATWOOT_DOMAIN}
+      - NODE_ENV=production
+      - RAILS_ENV=production
+      - POSTGRES_DATABASE=${CHATWOOT_DATABASE}
+      - POSTGRES_HOST=${PROJECT_NAME}_db
+      - POSTGRES_USERNAME=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
+      # Configuración WAHA
+      - WAHA_API_URL=http://${PROJECT_NAME}_whatsapp:3000
+      - WAHA_API_KEY=${WAHA_API_KEY_PLAIN}
+      - WAHA_WEBHOOK_URL=https://${CHATWOOT_DOMAIN}/webhooks/whatsapp
+    command: bundle exec sidekiq -C config/sidekiq.yml
+    volumes:
+      - chatwoot_data:/app/storage
+    networks:
+      - default
+
+  # -------------------------------------------------------
+  # 5. NOCODB (Interfaz de Base de Datos)
+  # -------------------------------------------------------
+  nocodb:
+    image: nocodb/nocodb:latest
+    container_name: ${PROJECT_NAME}_nocodb
+    restart: always
+    environment:
+      NC_DB: "pg://postgres:5432?u=${POSTGRES_USER}&p=${POSTGRES_PASSWORD}&d=${POSTGRES_DB}"
+      NC_PUBLIC_URL: "https://${NOCODB_DOMAIN}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME}_nocodb.rule=Host(`${NOCODB_DOMAIN}`)"
+      - "traefik.http.routers.${PROJECT_NAME}_nocodb.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}_nocodb.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}_nocodb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PROJECT_NAME}_nocodb.loadbalancer.server.port=8080"
+    networks:
+      - default
+
+  # -------------------------------------------------------
+  # 6. N8N (Automatización de Workflows)
+  # -------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: ${PROJECT_NAME}_n8n
+    restart: always
+    ports:
+      - "${N8N_PORT}:5678"
+    environment:
+      - WEBHOOK_URL=https://${N8N_DOMAIN}
+      - N8N_HOST=${N8N_DOMAIN}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME}_n8n.rule=Host(`${N8N_DOMAIN}`)"
+      - "traefik.http.routers.${PROJECT_NAME}_n8n.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}_n8n.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}_n8n.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PROJECT_NAME}_n8n.loadbalancer.server.port=5678"
+    networks:
+      - default
+
+  # -------------------------------------------------------
+  # 7. WAHA (WhatsApp HTTP API)
+  # -------------------------------------------------------
+  waha:
+    image: devlikeapro/waha
+    container_name: ${PROJECT_NAME}_whatsapp
+    restart: always
+    environment:
+      - WHATSAPP_DEFAULT_ENGINE=WEBJS
+      - WAHA_PRINT_QR=True
+      # Seguridad del Dashboard (Swagger)
+      - WHATSAPP_SWAGGER_USERNAME=${WAHA_SWAGGER_USERNAME}
+      - WHATSAPP_SWAGGER_PASSWORD=${WAHA_SWAGGER_PASSWORD}
+      - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME}
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD}
+      # Opciones extra
+      - WHATSAPP_RESTART_ON_FAIL=True
+      - WAHA_BASE_URL=https://${WAHA_DOMAIN}
+      - WAHA_API_KEY=${WAHA_API_KEY_HASH}
+      - WAHA_API_KEY_PLAIN=${WAHA_API_KEY_PLAIN}
+      - WAHA_APPS_ENABLED=True
+      - REDIS_URL=redis://${PROJECT_NAME}_redis:6379
+      - WAHA_APPS_ON=calls,chatwoot
+      # Descargar archivos multimedia automáticamente
+      - WHATSAPP_DOWNLOAD_MEDIA=true
+    volumes:
+      - ./waha_data:/app/.waha
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${PROJECT_NAME}_waha.rule=Host(`${WAHA_DOMAIN}`)"
+      - "traefik.http.routers.${PROJECT_NAME}_waha.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_NAME}_waha.tls=true"
+      - "traefik.http.routers.${PROJECT_NAME}_waha.tls.certresolver=letsencrypt"
+      - "traefik.http.services.${PROJECT_NAME}_waha.loadbalancer.server.port=3000"
+    networks:
+      - default
+
+volumes:
+  pg_data:
+  redis_data:
+  chatwoot_data:
+
+networks:
+  default:
+    name: ${TRAEFIK_NETWORK}
+    external: true
