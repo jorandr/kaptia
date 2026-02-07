@@ -143,33 +143,17 @@ sed -i "s/WAHA_SWAGGER_PASSWORD=.*/WAHA_SWAGGER_PASSWORD=$WAHA_DASHBOARD_PASSWOR
 print_success "Configuración guardada en .env"
 
 # =============================================================================
-# 3. VERIFICAR RED DE TRAEFIK
+# 3. CREAR DIRECTORIOS NECESARIOS
 # =============================================================================
-print_header "3. Verificando Red de Traefik"
-
-TRAEFIK_NETWORK=$(grep TRAEFIK_NETWORK .env | cut -d '=' -f2)
-TRAEFIK_NETWORK=${TRAEFIK_NETWORK:-web}
-
-if docker network ls | grep -q "$TRAEFIK_NETWORK"; then
-    print_success "Red $TRAEFIK_NETWORK existe"
-else
-    print_info "Creando red $TRAEFIK_NETWORK..."
-    docker network create "$TRAEFIK_NETWORK"
-    print_success "Red $TRAEFIK_NETWORK creada"
-fi
-
-# =============================================================================
-# 4. CREAR DIRECTORIOS NECESARIOS
-# =============================================================================
-print_header "4. Creando Directorios de Datos"
+print_header "3. Creando Directorios de Datos"
 
 mkdir -p n8n_data waha_data redis_data
 print_success "Directorios creados"
 
 # =============================================================================
-# 5. INICIAR SERVICIOS
+# 4. INICIAR SERVICIOS
 # =============================================================================
-print_header "5. Iniciando Servicios Docker"
+print_header "4. Iniciando Servicios Docker"
 
 print_info "Descargando imágenes (esto puede tardar unos minutos)..."
 docker compose pull
@@ -186,7 +170,7 @@ print_info "Verificando estado de los servicios..."
 docker compose ps
 
 # =============================================================================
-# 5.5 CREAR BASE DE DATOS DE CHATWOOT
+# 4.5 CREAR BASE DE DATOS DE CHATWOOT
 # =============================================================================
 print_info "Creando base de datos de Chatwoot..."
 
@@ -214,9 +198,9 @@ EOSQL
 print_success "Base de datos de Chatwoot creada"
 
 # =============================================================================
-# 6. AUTO-CONFIGURACIÓN
+# 5. AUTO-CONFIGURACIÓN
 # =============================================================================
-print_header "6. Auto-Configuración de Servicios"
+print_header "5. Auto-Configuración de Servicios"
 
 read -p "¿Deseas ejecutar la configuración automática de los servicios? (S/n): " -r
 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
@@ -227,7 +211,7 @@ else
 fi
 
 # =============================================================================
-# 7. RESUMEN FINAL
+# 6. RESUMEN FINAL
 # =============================================================================
 print_header "✅ Instalación Completada"
 
