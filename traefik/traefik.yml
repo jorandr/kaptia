@@ -1,6 +1,6 @@
 api:
   dashboard: true
-  debug: false
+  debug: true
 
 entryPoints:
   web:
@@ -36,7 +36,7 @@ certificatesResolvers:
         entryPoint: web
 
 log:
-  level: INFO
+  level: DEBUG
   filePath: /var/log/traefik.log
 
 accessLog:
