@@ -37,7 +37,7 @@ certificatesResolvers:
 
 log:
   level: DEBUG
-  filePath: /var/log/traefik.log
+  # Sin filePath los logs van a stdout
 
-accessLog:
-  filePath: /var/log/access.log
+accessLog: {}
+  # Sin filePath los logs van a stdout
