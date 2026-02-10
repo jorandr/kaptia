@@ -26,14 +26,21 @@ sudo bash infrastructure/server-setup.sh
 **2. Configurar GitHub Secrets:**
 ```
 Settings > Secrets > Actions
-- SSH_PRIVATE_KEY, SSH_USER, SERVER_HOST
-- DOMAIN, PROJECT_NAME
-- Contraseñas (POSTGRES_PASSWORD, CHATWOOT_SECRET_KEY_BASE, etc.)
+
+Por cada cliente, crea secrets con el prefijo del cliente:
+CLIENTE1_SSH_PRIVATE_KEY, CLIENTE1_SSH_USER, CLIENTE1_SERVER_HOST
+CLIENTE1_DOMAIN, CLIENTE1_PROJECT_NAME
+CLIENTE1_POSTGRES_PASSWORD, CLIENTE1_CHATWOOT_SECRET_KEY_BASE
+CLIENTE1_CHATWOOT_DOMAIN, CLIENTE1_WAHA_API_KEY_PLAIN
+
+Repite para CLIENTE2_, MISERVIDOR_, etc.
 ```
 
 **3. Deploy automático:**
 ```bash
-git push origin main  # Deploy automático
+# Deploy manual desde GitHub UI:
+Actions > Deploy to Production > Run workflow
+Selecciona el cliente (CLIENTE1, CLIENTE2, MISERVIDOR)
 ```
 
 ### Opción 2: Manual (Para servidor del cliente)

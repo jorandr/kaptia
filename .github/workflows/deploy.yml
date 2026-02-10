@@ -1,19 +1,16 @@
 name: 🚀 Deploy to Production
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to deploy to'
+      cliente:
+        description: 'Cliente a deployar'
         required: true
-        default: 'production'
         type: choice
         options:
-          - production
-          - staging
+          - CLIENTE1
+          - CLIENTE2
+          - MISERVIDOR
 
 env:
   DEPLOY_DIR: /opt/kaptia
@@ -23,7 +20,6 @@ jobs:
   deploy:
     name: Deploy Kaptia
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'production' }}
     
     steps:
       - name: 📥 Checkout code
@@ -32,16 +28,19 @@ jobs:
       - name: 🔐 Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets[format('{0}_SSH_PRIVATE_KEY', github.event.inputs.cliente)] }}
       
       - name: 📝 Add server to known hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
       
       - name: 🧪 Test SSH connection
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "echo '✓ SSH connection successful'"
+          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          ssh ${SSH_USER}@${SERVER_HOST} "echo '✓ SSH connection successful'"
       
       - name: 📦 Prepare deployment package
         run: |
@@ -54,36 +53,49 @@ jobs:
       
       - name: 🚀 Upload to server
         run: |
-          scp kaptia-app.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/
+          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          scp kaptia-app.tar.gz ${SSH_USER}@${SERVER_HOST}:/tmp/
       
       - name: 📋 Create .env file on server
+        env:
+          PROJECT_NAME: ${{ secrets[format('{0}_PROJECT_NAME', github.event.inputs.cliente)] }}
+          DOMAIN: ${{ secrets[format('{0}_DOMAIN', github.event.inputs.cliente)] }}
+          POSTGRES_PASSWORD: ${{ secrets[format('{0}_POSTGRES_PASSWORD', github.event.inputs.cliente)] }}
+          CHATWOOT_SECRET: ${{ secrets[format('{0}_CHATWOOT_SECRET_KEY_BASE', github.event.inputs.cliente)] }}
+          CHATWOOT_DOMAIN: ${{ secrets[format('{0}_CHATWOOT_DOMAIN', github.event.inputs.cliente)] }}
+          WAHA_API_KEY: ${{ secrets[format('{0}_WAHA_API_KEY_PLAIN', github.event.inputs.cliente)] }}
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          
+          ssh ${SSH_USER}@${SERVER_HOST} << 'EOF'
             cat > /tmp/kaptia.env << 'ENVFILE'
-          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
-          DOMAIN=${{ secrets.DOMAIN }}
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          CHATWOOT_DOMAIN=${{ secrets.CHATWOOT_DOMAIN }}
-          CHATWOOT_SECRET_KEY_BASE=${{ secrets.CHATWOOT_SECRET_KEY_BASE }}
-          CHATWOOT_DATABASE=${{ secrets.CHATWOOT_DATABASE }}
-          NOCODB_DOMAIN=${{ secrets.NOCODB_DOMAIN }}
-          N8N_DOMAIN=${{ secrets.N8N_DOMAIN }}
+          PROJECT_NAME=${{ env.PROJECT_NAME }}
+          DOMAIN=${{ env.DOMAIN }}
+          POSTGRES_USER=admin
+          POSTGRES_PASSWORD=${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB=kaptia_db
+          CHATWOOT_DOMAIN=${{ env.CHATWOOT_DOMAIN }}
+          CHATWOOT_SECRET_KEY_BASE=${{ env.CHATWOOT_SECRET }}
+          CHATWOOT_DATABASE=chatwoot_production
+          NOCODB_DOMAIN=nocodb.${{ env.DOMAIN }}
+          N8N_DOMAIN=${{ env.DOMAIN }}
           N8N_PORT=5678
-          WAHA_DOMAIN=${{ secrets.WAHA_DOMAIN }}
-          WAHA_API_KEY_PLAIN=${{ secrets.WAHA_API_KEY_PLAIN }}
-          WAHA_API_KEY_HASH=${{ secrets.WAHA_API_KEY_HASH }}
-          WAHA_DASHBOARD_PASSWORD=${{ secrets.WAHA_DASHBOARD_PASSWORD }}
-          WAHA_SWAGGER_PASSWORD=${{ secrets.WAHA_SWAGGER_PASSWORD }}
+          WAHA_DOMAIN=waha.${{ env.DOMAIN }}
+          WAHA_API_KEY_PLAIN=${{ env.WAHA_API_KEY }}
+          WAHA_API_KEY_HASH=sha512:$(echo -n "${{ env.WAHA_API_KEY }}" | sha512sum | cut -d' ' -f1)
           DEFAULT_LOCALE=es
-          LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}
+          LETSENCRYPT_EMAIL=admin@${{ env.DOMAIN }}
           ENVFILE
           EOF
       
       - name: 🔄 Deploy application
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          
+          ssh ${SSH_USER}@${SERVER_HOST} << 'EOF'
             set -e
             
             # Colores
@@ -138,7 +150,10 @@ jobs:
       
       - name: 🏥 Health check
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          
+          ssh ${SSH_USER}@${SERVER_HOST} << 'EOF'
             cd ${{ env.DEPLOY_DIR }}
             
             # Verificar contenedores en ejecución
@@ -162,8 +177,8 @@ jobs:
         run: |
           echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Server:** ${{ secrets.SERVER_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cliente:** ${{ github.event.inputs.cliente }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server:** ${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

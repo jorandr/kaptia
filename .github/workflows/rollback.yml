@@ -3,18 +3,18 @@ name: 🔄 Rollback Deployment
 on:
   workflow_dispatch:
     inputs:
-      backup_file:
-        description: 'Backup file name (e.g., backup_20260210_120000.tar.gz) or "latest" for most recent'
+      cliente:
+        description: 'Cliente para rollback'
         required: true
-        default: 'latest'
-      environment:
-        description: 'Environment to rollback'
-        required: true
-        default: 'production'
         type: choice
         options:
-          - production
-          - staging
+          - CLIENTE1
+          - CLIENTE2
+          - MISERVIDOR
+      backup_file:
+        description: 'Backup file name o "latest"'
+        required: true
+        default: 'latest'
 
 env:
   DEPLOY_DIR: /opt/kaptia
@@ -24,22 +24,25 @@ jobs:
   rollback:
     name: Rollback to Previous Version
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
     
     steps:
       - name: 🔐 Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets[format('{0}_SSH_PRIVATE_KEY', github.event.inputs.cliente)] }}
       
       - name: 📝 Add server to known hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
       
       - name: ⏮️ Perform rollback
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          
+          ssh ${SSH_USER}@${SERVER_HOST} << 'EOF'
             set -e
             
             # Colores
@@ -100,7 +103,10 @@ jobs:
       
       - name: 🏥 Health check
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
+          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          
+          ssh ${SSH_USER}@${SERVER_HOST} << 'EOF'
             cd ${{ env.DEPLOY_DIR }}
             
             RUNNING=$(sudo docker compose ps --filter "status=running" --format json | jq -s 'length')
@@ -123,7 +129,7 @@ jobs:
         run: |
           echo "## ⏮️ Rollback Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** ${{ github.event.inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cliente:** ${{ github.event.inputs.cliente }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Backup file:** ${{ github.event.inputs.backup_file }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Server:** ${{ secrets.SERVER_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server:** ${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
