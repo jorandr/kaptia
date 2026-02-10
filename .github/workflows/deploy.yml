@@ -61,8 +61,8 @@ jobs:
           DOMAIN: ${{ secrets[format('{0}_DOMAIN', github.event.inputs.cliente)] }}
           POSTGRES_PASSWORD: ${{ secrets[format('{0}_POSTGRES_PASSWORD', github.event.inputs.cliente)] }}
           CHATWOOT_SECRET: ${{ secrets[format('{0}_CHATWOOT_SECRET_KEY_BASE', github.event.inputs.cliente)] }}
-          CHATWOOT_DOMAIN: ${{ secrets[format('{0}_CHATWOOT_DOMAIN', github.event.inputs.cliente)] }}
           WAHA_API_KEY: ${{ secrets[format('{0}_WAHA_API_KEY_PLAIN', github.event.inputs.cliente)] }}
+          WAHA_DASHBOARD_PASSWORD: ${{ secrets[format('{0}_WAHA_DASHBOARD_PASSWORD', github.event.inputs.cliente)] }}
         run: |
           SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
           SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
@@ -71,20 +71,33 @@ jobs:
             cat > /tmp/kaptia.env << 'ENVFILE'
           PROJECT_NAME=${{ env.PROJECT_NAME }}
           DOMAIN=${{ env.DOMAIN }}
+          
           POSTGRES_USER=admin
           POSTGRES_PASSWORD=${{ env.POSTGRES_PASSWORD }}
           POSTGRES_DB=kaptia_db
-          CHATWOOT_DOMAIN=${{ env.CHATWOOT_DOMAIN }}
+          
+          CHATWOOT_DOMAIN=chat.${{ env.DOMAIN }}
           CHATWOOT_SECRET_KEY_BASE=${{ env.CHATWOOT_SECRET }}
           CHATWOOT_DATABASE=chatwoot_production
+          
           NOCODB_DOMAIN=nocodb.${{ env.DOMAIN }}
+          
           N8N_DOMAIN=${{ env.DOMAIN }}
           N8N_PORT=5678
+          
           WAHA_DOMAIN=waha.${{ env.DOMAIN }}
           WAHA_API_KEY_PLAIN=${{ env.WAHA_API_KEY }}
           WAHA_API_KEY_HASH=sha512:$(echo -n "${{ env.WAHA_API_KEY }}" | sha512sum | cut -d' ' -f1)
-          DEFAULT_LOCALE=es
+          WAHA_DASHBOARD_USERNAME=admin
+          WAHA_DASHBOARD_PASSWORD=${{ env.WAHA_DASHBOARD_PASSWORD }}
+          WAHA_SWAGGER_USERNAME=admin
+          WAHA_SWAGGER_PASSWORD=${{ env.WAHA_DASHBOARD_PASSWORD }}
+          
+          TRAEFIK_NETWORK=web
           LETSENCRYPT_EMAIL=admin@${{ env.DOMAIN }}
+          
+          TZ=Europe/Madrid
+          DEFAULT_LOCALE=es
           ENVFILE
           EOF
       
@@ -103,29 +116,36 @@ jobs:
             
             echo -e "${BLUE}Starting deployment...${NC}"
             
-            # Crear backup si existe instalación previa
-            if [ -d "${{ env.DEPLOY_DIR }}" ] && [ -f "${{ env.DEPLOY_DIR }}/docker-compose.yml" ]; then
-              echo -e "${BLUE}Creating backup...${NC}"
-              mkdir -p ${{ env.BACKUP_DIR }}
-              BACKUP_FILE="${{ env.BACKUP_DIR }}/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
-              cd ${{ env.DEPLOY_DIR }}
-              sudo docker compose down || true
-              tar -czf "$BACKUP_FILE" --exclude='*.log' --exclude='node_modules' .
-              echo -e "${GREEN}✓ Backup created: $BACKUP_FILE${NC}"
-            fi
-            
             # Preparar directorio
             echo -e "${BLUE}Preparing deployment directory...${NC}"
             sudo mkdir -p ${{ env.DEPLOY_DIR }}
+            sudo mkdir -p ${{ env.BACKUP_DIR }}
             cd ${{ env.DEPLOY_DIR }}
+            
+            # Copiar nuevo .env primero (antes del backup)
+            sudo cp /tmp/kaptia.env ${{ env.DEPLOY_DIR }}/.env
+            sudo chmod 600 ${{ env.DEPLOY_DIR }}/.env
+            
+            # Crear backup si existe instalación previa
+            if [ -f "${{ env.DEPLOY_DIR }}/docker-compose.yml" ]; then
+              echo -e "${BLUE}Creating backup...${NC}"
+              BACKUP_FILE="${{ env.BACKUP_DIR }}/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+              
+              # Detener contenedores (ahora usa el .env nuevo)
+              sudo docker compose down || true
+              
+              # Backup de archivos (excluyendo .env nuevo)
+              sudo tar -czf "$BACKUP_FILE" \
+                --exclude='*.log' \
+                --exclude='node_modules' \
+                --exclude='.env' \
+                .
+              echo -e "${GREEN}✓ Backup created: $BACKUP_FILE${NC}"
+            fi
             
             # Extraer aplicación
             echo -e "${BLUE}Extracting application files...${NC}"
             sudo tar -xzf /tmp/kaptia-app.tar.gz -C ${{ env.DEPLOY_DIR }}
-            
-            # Mover .env
-            sudo mv /tmp/kaptia.env ${{ env.DEPLOY_DIR }}/.env
-            sudo chmod 600 ${{ env.DEPLOY_DIR }}/.env
             
             # Pull imágenes
             echo -e "${BLUE}Pulling Docker images...${NC}"

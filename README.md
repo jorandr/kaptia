@@ -27,13 +27,26 @@ sudo bash infrastructure/server-setup.sh
 ```
 Settings > Secrets > Actions
 
-Por cada cliente, crea secrets con el prefijo del cliente:
-CLIENTE1_SSH_PRIVATE_KEY, CLIENTE1_SSH_USER, CLIENTE1_SERVER_HOST
-CLIENTE1_DOMAIN, CLIENTE1_PROJECT_NAME
-CLIENTE1_POSTGRES_PASSWORD, CLIENTE1_CHATWOOT_SECRET_KEY_BASE
-CLIENTE1_CHATWOOT_DOMAIN, CLIENTE1_WAHA_API_KEY_PLAIN
+Por cada cliente, crea estos secrets con el prefijo del cliente:
 
-Repite para CLIENTE2_, MISERVIDOR_, etc.
+# Conexión SSH
+PRIMEHOUSING_SSH_PRIVATE_KEY
+PRIMEHOUSING_SSH_USER
+PRIMEHOUSING_SERVER_HOST
+
+# Configuración básica
+PRIMEHOUSING_PROJECT_NAME          # ej: primehousing
+PRIMEHOUSING_DOMAIN                # ej: primehousing.es
+
+# Base de datos
+PRIMEHOUSING_POSTGRES_PASSWORD     # Generar con: openssl rand -base64 32
+
+# Chatwoot
+PRIMEHOUSING_CHATWOOT_SECRET_KEY_BASE  # Generar con: openssl rand -hex 64
+
+# WAHA (WhatsApp)
+PRIMEHOUSING_WAHA_API_KEY_PLAIN        # Generar con: openssl rand -base64 32
+PRIMEHOUSING_WAHA_DASHBOARD_PASSWORD   # Generar con: openssl rand -base64 16
 ```
 
 **3. Deploy automático:**

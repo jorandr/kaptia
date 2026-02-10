@@ -58,13 +58,14 @@ print_success "Docker y Docker Compose disponibles"
 if [ -d "$DEPLOY_DIR" ] && [ -f "$DEPLOY_DIR/docker-compose.yml" ]; then
     print_info "Creando backup antes del deployment..."
     
-    mkdir -p "$BACKUP_DIR"
+    sudo mkdir -p "$BACKUP_DIR"
+    sudo chmod 755 "$BACKUP_DIR"
     BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
     
     cd "$DEPLOY_DIR"
     docker compose down || true
     
-    tar -czf "$BACKUP_FILE" \
+    sudo tar -czf "$BACKUP_FILE" \
         --exclude='*.log' \
         --exclude='node_modules' \
         .
@@ -77,7 +78,7 @@ fi
 # =============================================================================
 print_info "Preparando directorio de deployment..."
 
-mkdir -p "$DEPLOY_DIR"
+sudo mkdir -p "$DEPLOY_DIR"
 cd "$DEPLOY_DIR"
 
 # =============================================================================
