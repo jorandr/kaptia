@@ -1,0 +1,175 @@
+name: 🚀 Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  DEPLOY_DIR: /opt/kaptia
+  BACKUP_DIR: /backups/kaptia
+
+jobs:
+  deploy:
+    name: Deploy Kaptia
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔐 Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      - name: 📝 Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: 🧪 Test SSH connection
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} "echo '✓ SSH connection successful'"
+      
+      - name: 📦 Prepare deployment package
+        run: |
+          cd app
+          tar -czf ../kaptia-app.tar.gz \
+            --exclude='.git' \
+            --exclude='*.log' \
+            --exclude='node_modules' \
+            .
+      
+      - name: 🚀 Upload to server
+        run: |
+          scp kaptia-app.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}:/tmp/
+      
+      - name: 📋 Create .env file on server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cat > /tmp/kaptia.env << 'ENVFILE'
+          PROJECT_NAME=${{ secrets.PROJECT_NAME }}
+          DOMAIN=${{ secrets.DOMAIN }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          CHATWOOT_DOMAIN=${{ secrets.CHATWOOT_DOMAIN }}
+          CHATWOOT_SECRET_KEY_BASE=${{ secrets.CHATWOOT_SECRET_KEY_BASE }}
+          CHATWOOT_DATABASE=${{ secrets.CHATWOOT_DATABASE }}
+          NOCODB_DOMAIN=${{ secrets.NOCODB_DOMAIN }}
+          N8N_DOMAIN=${{ secrets.N8N_DOMAIN }}
+          N8N_PORT=5678
+          WAHA_DOMAIN=${{ secrets.WAHA_DOMAIN }}
+          WAHA_API_KEY_PLAIN=${{ secrets.WAHA_API_KEY_PLAIN }}
+          WAHA_API_KEY_HASH=${{ secrets.WAHA_API_KEY_HASH }}
+          WAHA_DASHBOARD_PASSWORD=${{ secrets.WAHA_DASHBOARD_PASSWORD }}
+          WAHA_SWAGGER_PASSWORD=${{ secrets.WAHA_SWAGGER_PASSWORD }}
+          DEFAULT_LOCALE=es
+          LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}
+          ENVFILE
+          EOF
+      
+      - name: 🔄 Deploy application
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            set -e
+            
+            # Colores
+            GREEN='\033[0;32m'
+            BLUE='\033[0;34m'
+            NC='\033[0m'
+            
+            echo -e "${BLUE}Starting deployment...${NC}"
+            
+            # Crear backup si existe instalación previa
+            if [ -d "${{ env.DEPLOY_DIR }}" ] && [ -f "${{ env.DEPLOY_DIR }}/docker-compose.yml" ]; then
+              echo -e "${BLUE}Creating backup...${NC}"
+              mkdir -p ${{ env.BACKUP_DIR }}
+              BACKUP_FILE="${{ env.BACKUP_DIR }}/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+              cd ${{ env.DEPLOY_DIR }}
+              sudo docker compose down || true
+              tar -czf "$BACKUP_FILE" --exclude='*.log' --exclude='node_modules' .
+              echo -e "${GREEN}✓ Backup created: $BACKUP_FILE${NC}"
+            fi
+            
+            # Preparar directorio
+            echo -e "${BLUE}Preparing deployment directory...${NC}"
+            sudo mkdir -p ${{ env.DEPLOY_DIR }}
+            cd ${{ env.DEPLOY_DIR }}
+            
+            # Extraer aplicación
+            echo -e "${BLUE}Extracting application files...${NC}"
+            sudo tar -xzf /tmp/kaptia-app.tar.gz -C ${{ env.DEPLOY_DIR }}
+            
+            # Mover .env
+            sudo mv /tmp/kaptia.env ${{ env.DEPLOY_DIR }}/.env
+            sudo chmod 600 ${{ env.DEPLOY_DIR }}/.env
+            
+            # Pull imágenes
+            echo -e "${BLUE}Pulling Docker images...${NC}"
+            sudo docker compose pull
+            
+            # Desplegar
+            echo -e "${BLUE}Deploying application...${NC}"
+            sudo docker compose up -d --remove-orphans
+            
+            # Verificar estado
+            echo -e "${BLUE}Checking container status...${NC}"
+            sleep 10
+            sudo docker compose ps
+            
+            # Limpiar
+            rm -f /tmp/kaptia-app.tar.gz
+            
+            echo -e "${GREEN}✓ Deployment completed successfully!${NC}"
+          EOF
+      
+      - name: 🏥 Health check
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+            cd ${{ env.DEPLOY_DIR }}
+            
+            # Verificar contenedores en ejecución
+            RUNNING=$(sudo docker compose ps --filter "status=running" --format json | jq -s 'length')
+            TOTAL=$(sudo docker compose ps --format json | jq -s 'length')
+            
+            echo "Containers running: $RUNNING/$TOTAL"
+            
+            if [ "$RUNNING" -eq "$TOTAL" ]; then
+              echo "✓ All containers are healthy"
+              exit 0
+            else
+              echo "⚠ Some containers are not running"
+              sudo docker compose ps
+              exit 1
+            fi
+          EOF
+      
+      - name: 📊 Deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server:** ${{ secrets.SERVER_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 💬 Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Check the logs for more details."

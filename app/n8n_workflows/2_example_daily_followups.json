@@ -1,0 +1,133 @@
+{
+  "name": "Ejemplo: Seguimiento Diario",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Programado - Cada día a las 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT f.*, c.name, c.phone, c.whatsapp, p.title as property_title\nFROM followups f\nLEFT JOIN contacts c ON f.contact_id = c.id\nLEFT JOIN properties p ON f.property_id = p.id\nWHERE f.status = 'pending'\nAND DATE(f.scheduled_date) = CURRENT_DATE\nORDER BY f.priority DESC, f.scheduled_date ASC;",
+        "additionalFields": {}
+      },
+      "id": "get-followups",
+      "name": "Obtener Seguimientos del Día",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Formatear lista de seguimientos\nconst followups = items;\n\nif (followups.length === 0) {\n  return [{\n    json: {\n      message: '✅ No hay seguimientos pendientes para hoy',\n      count: 0\n    }\n  }];\n}\n\nlet message = `📋 Seguimientos pendientes para hoy (${followups.length}):\\n\\n`;\n\nfollowups.forEach((item, index) => {\n  const priority = item.json.priority === 'high' ? '🔴' : item.json.priority === 'normal' ? '🟡' : '🟢';\n  message += `${priority} ${index + 1}. ${item.json.name}\\n`;\n  message += `   📞 ${item.json.phone || item.json.whatsapp}\\n`;\n  if (item.json.property_title) {\n    message += `   🏠 ${item.json.property_title}\\n`;\n  }\n  if (item.json.notes) {\n    message += `   📝 ${item.json.notes}\\n`;\n  }\n  message += `\\n`;\n});\n\nreturn [{\n  json: {\n    message: message,\n    count: followups.length,\n    followups: followups.map(f => f.json)\n  }\n}];"
+      },
+      "id": "format-message",
+      "name": "Formatear Mensaje",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{ $env.PROJECT_NAME }}_whatsapp:3000/api/sendText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.WAHA_API_KEY_PLAIN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "session",
+              "value": "default"
+            },
+            {
+              "name": "chatId",
+              "value": "NUMERO_EQUIPO@c.us"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-notification",
+      "name": "Enviar Notificación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Programado - Cada día a las 9:00": {
+      "main": [
+        [
+          {
+            "node": "Obtener Seguimientos del Día",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Seguimientos del Día": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Enviar Notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-29T00:00:00.000Z",
+  "versionId": "1"
+}

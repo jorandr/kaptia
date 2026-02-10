@@ -1,0 +1,82 @@
+name: 🔍 CI - Validate Configuration
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - develop
+
+jobs:
+  validate:
+    name: Validate Docker Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔍 Validate docker-compose.yml
+        run: |
+          cd app
+          docker compose config > /dev/null
+          echo "✓ docker-compose.yml is valid"
+      
+      - name: 📋 Check required files
+        run: |
+          cd app
+          
+          REQUIRED_FILES=(
+            "docker-compose.yml"
+            "env.example"
+            "setup.sh"
+            "auto-config.sh"
+          )
+          
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✓ $file exists"
+            else
+              echo "✗ $file is missing"
+              exit 1
+            fi
+          done
+      
+      - name: 🧪 Test env.example
+        run: |
+          cd app
+          
+          # Verificar que env.example tiene las variables necesarias
+          REQUIRED_VARS=(
+            "PROJECT_NAME"
+            "DOMAIN"
+            "POSTGRES_USER"
+            "POSTGRES_PASSWORD"
+            "POSTGRES_DB"
+            "CHATWOOT_SECRET_KEY_BASE"
+          )
+          
+          for var in "${REQUIRED_VARS[@]}"; do
+            if grep -q "^$var=" env.example; then
+              echo "✓ $var found in env.example"
+            else
+              echo "✗ $var missing in env.example"
+              exit 1
+            fi
+          done
+      
+      - name: 🐳 Build Docker images (test)
+        run: |
+          cd app
+          cp env.example .env
+          docker compose pull
+          echo "✓ All images can be pulled"
+      
+      - name: 📊 Validation summary
+        if: success()
+        run: |
+          echo "## ✅ Configuration Validation Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All configuration files are valid and ready for deployment." >> $GITHUB_STEP_SUMMARY
