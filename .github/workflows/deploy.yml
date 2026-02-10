@@ -8,9 +8,7 @@ on:
         required: true
         type: choice
         options:
-          - CLIENTE1
-          - CLIENTE2
-          - MISERVIDOR
+          - PRIMEHOUSING
 
 env:
   DEPLOY_DIR: /opt/kaptia
