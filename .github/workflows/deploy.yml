@@ -78,7 +78,7 @@ jobs:
           
           CHATWOOT_DOMAIN=chat.${{ env.DOMAIN }}
           CHATWOOT_SECRET_KEY_BASE=${{ env.CHATWOOT_SECRET }}
-          CHATWOOT_DATABASE=chatwoot_production
+          CHATWOOT_DATABASE=kaptia_db
           
           NOCODB_DOMAIN=nocodb.${{ env.DOMAIN }}
           
