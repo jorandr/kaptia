@@ -131,8 +131,8 @@ jobs:
               echo -e "${BLUE}Creating backup...${NC}"
               BACKUP_FILE="${{ env.BACKUP_DIR }}/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
               
-              # Detener contenedores (ahora usa el .env nuevo)
-              sudo docker compose down || true
+              # Detener contenedores y ELIMINAR volúmenes (instalación fresca)
+              sudo docker compose down -v
               
               # Backup de archivos (excluyendo .env nuevo)
               sudo tar -czf "$BACKUP_FILE" \
