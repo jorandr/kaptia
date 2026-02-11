@@ -90,12 +90,12 @@ jobs:
           N8N_PORT=5678
           
           WAHA_DOMAIN=waha.${{ env.DOMAIN }}
-          WAHA_API_KEY_PLAIN=\${WAHA_API_KEY}
-          WAHA_API_KEY_HASH=\$(echo -n "\${WAHA_API_KEY}" | sha256sum | cut -d' ' -f1)
+          WAHA_API_KEY_PLAIN=${WAHA_API_KEY}
+          WAHA_API_KEY_HASH=sha512:\$(echo -n "${WAHA_API_KEY}" | sha512sum | cut -d' ' -f1)
           WAHA_DASHBOARD_USERNAME=admin
-          WAHA_DASHBOARD_PASSWORD=\${WAHA_DASHBOARD_PASSWORD}
+          WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD}
           WAHA_SWAGGER_USERNAME=admin
-          WAHA_SWAGGER_PASSWORD=\${WAHA_SWAGGER_PASSWORD}
+          WAHA_SWAGGER_PASSWORD=${WAHA_SWAGGER_PASSWORD}
           
           TRAEFIK_NETWORK=nieto-network
           LETSENCRYPT_EMAIL=${{ secrets.SHARED_LETSENCRYPT_EMAIL }}
@@ -136,8 +136,8 @@ jobs:
               echo -e "\${BLUE}Creating backup...\${NC}"
               BACKUP_FILE="${BACKUP_DIR}/backup_\$(date +%Y%m%d_%H%M%S).tar.gz"
               
-              # Detener contenedores y ELIMINAR volúmenes (instalación fresca)
-              sudo docker compose down -v
+              # Detener contenedores (manteniendo volúmenes)
+              sudo docker compose down
               
               # Backup de archivos (excluyendo .env nuevo)
               sudo tar -czf "\$BACKUP_FILE" \
