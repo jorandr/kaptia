@@ -53,7 +53,10 @@ services:
       - POSTGRES_PORT=5432
       - REDIS_URL=redis://redis:6379
       - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
-    command: bundle exec rails db:chatwoot_prepare
+    command: >
+      sh -c 'bundle exec rails db:create &&
+             bundle exec rails db:migrate &&
+             bundle exec rails db:seed'
     restart: "no"
     networks:
       - default
