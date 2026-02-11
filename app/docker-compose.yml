@@ -53,7 +53,7 @@ services:
       - POSTGRES_PORT=5432
       - REDIS_URL=redis://redis:6379
       - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY_BASE}
-    command: bundle exec rails db:chatwoot_prepare
+    command: sh -c "bundle exec rails db:create && bundle exec rails db:reset && bundle exec rails db:migrate"
     restart: "no"
     networks:
       - default
@@ -90,8 +90,6 @@ services:
       - WAHA_API_KEY=${WAHA_API_KEY_PLAIN}
       - WAHA_WEBHOOK_URL=https://${CHATWOOT_DOMAIN}/webhooks/whatsapp
     command: bundle exec rails s -p 3000 -b 0.0.0.0
-    ports:
-      - "3000:3000"
     volumes:
       - chatwoot_data:/app/storage
     labels:
@@ -169,8 +167,6 @@ services:
     image: n8nio/n8n:latest
     container_name: ${PROJECT_NAME}_n8n
     restart: always
-    ports:
-      - "${N8N_PORT}:5678"
     environment:
       - WEBHOOK_URL=https://${N8N_DOMAIN}
       - N8N_HOST=${N8N_DOMAIN}
