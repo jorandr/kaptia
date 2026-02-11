@@ -9,10 +9,13 @@ on:
         type: choice
         options:
           - PRIMEHOUSING
+          - CLIENTE2
+          - CLIENTE3
 
 env:
-  DEPLOY_DIR: /opt/kaptia
-  BACKUP_DIR: /backups/kaptia
+  # Directorio base se construye dinámicamente por cliente
+  DEPLOY_BASE: /opt
+  BACKUP_BASE: /backups
 
 jobs:
   deploy:
@@ -26,19 +29,16 @@ jobs:
       - name: 🔐 Setup SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets[format('{0}_SSH_PRIVATE_KEY', github.event.inputs.cliente)] }}
+          ssh-private-key: ${{ secrets.SHARED_SSH_PRIVATE_KEY }}
       
       - name: 📝 Add server to known hosts
         run: |
           mkdir -p ~/.ssh
-          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -H "${{ secrets.SHARED_SERVER_HOST }}" >> ~/.ssh/known_hosts
       
       - name: 🧪 Test SSH connection
         run: |
-          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
-          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
-          ssh ${SSH_USER}@${SERVER_HOST} "echo '✓ SSH connection successful'"
+          ssh ${{ secrets.SHARED_SSH_USER }}@${{ secrets.SHARED_SERVER_HOST }} "echo '✓ SSH connection successful'"
       
       - name: 📦 Prepare deployment package
         run: |
@@ -51,9 +51,12 @@ jobs:
       
       - name: 🚀 Upload to server
         run: |
-          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
-          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
-          scp kaptia-app.tar.gz ${SSH_USER}@${SERVER_HOST}:/tmp/
+          CLIENTE_LOWER=$(echo "${{ github.event.inputs.cliente }}" | tr '[:upper:]' '[:lower:]')
+          
+          # Crear directorio específico del cliente
+          ssh ${{ secrets.SHARED_SSH_USER }}@${{ secrets.SHARED_SERVER_HOST }} "sudo mkdir -p ${{ env.DEPLOY_BASE }}/kaptia-${CLIENTE_LOWER}"
+          
+          scp kaptia-app.tar.gz ${{ secrets.SHARED_SSH_USER }}@${{ secrets.SHARED_SERVER_HOST }}:/tmp/
       
       - name: 📋 Create .env file on server
         env:
@@ -61,13 +64,15 @@ jobs:
           DOMAIN: ${{ secrets[format('{0}_DOMAIN', github.event.inputs.cliente)] }}
           POSTGRES_PASSWORD: ${{ secrets[format('{0}_POSTGRES_PASSWORD', github.event.inputs.cliente)] }}
           CHATWOOT_SECRET: ${{ secrets[format('{0}_CHATWOOT_SECRET_KEY_BASE', github.event.inputs.cliente)] }}
-          WAHA_API_KEY: ${{ secrets[format('{0}_WAHA_API_KEY_PLAIN', github.event.inputs.cliente)] }}
-          WAHA_DASHBOARD_PASSWORD: ${{ secrets[format('{0}_WAHA_DASHBOARD_PASSWORD', github.event.inputs.cliente)] }}
         run: |
-          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
-          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          CLIENTE_LOWER=$(echo "${{ github.event.inputs.cliente }}" | tr '[:upper:]' '[:lower:]')
           
-          ssh ${SSH_USER}@${SERVER_HOST} << 'EOF'
+          # Generar valores derivados
+          WAHA_API_KEY=$(openssl rand -hex 32)
+          WAHA_DASHBOARD_PASSWORD=$(openssl rand -base64 16)
+          WAHA_SWAGGER_PASSWORD=$(openssl rand -base64 16)
+          
+          ssh ${{ secrets.SHARED_SSH_USER }}@${{ secrets.SHARED_SERVER_HOST }} << EOF
             cat > /tmp/kaptia.env << 'ENVFILE'
           PROJECT_NAME=${{ env.PROJECT_NAME }}
           DOMAIN=${{ env.DOMAIN }}
@@ -76,37 +81,38 @@ jobs:
           POSTGRES_PASSWORD=${{ env.POSTGRES_PASSWORD }}
           POSTGRES_DB=kaptia_db
           
-          CHATWOOT_DOMAIN=chat.${{ env.DOMAIN }}
+          CHATWOOT_DOMAIN=crm.${{ env.DOMAIN }}
           CHATWOOT_SECRET_KEY_BASE=${{ env.CHATWOOT_SECRET }}
           CHATWOOT_DATABASE=kaptia_db
           
-          NOCODB_DOMAIN=nocodb.${{ env.DOMAIN }}
+          NOCODB_DOMAIN=db.${{ env.DOMAIN }}
           
-          N8N_DOMAIN=${{ env.DOMAIN }}
+          N8N_DOMAIN=n8n.${{ env.DOMAIN }}
           N8N_PORT=5678
           
           WAHA_DOMAIN=waha.${{ env.DOMAIN }}
-          WAHA_API_KEY_PLAIN=${{ env.WAHA_API_KEY }}
-          WAHA_API_KEY_HASH=sha512:$(echo -n "${{ env.WAHA_API_KEY }}" | sha512sum | cut -d' ' -f1)
+          WAHA_API_KEY_PLAIN=\${WAHA_API_KEY}
+          WAHA_API_KEY_HASH=\$(echo -n "\${WAHA_API_KEY}" | sha256sum | cut -d' ' -f1)
           WAHA_DASHBOARD_USERNAME=admin
-          WAHA_DASHBOARD_PASSWORD=${{ env.WAHA_DASHBOARD_PASSWORD }}
+          WAHA_DASHBOARD_PASSWORD=\${WAHA_DASHBOARD_PASSWORD}
           WAHA_SWAGGER_USERNAME=admin
-          WAHA_SWAGGER_PASSWORD=${{ env.WAHA_DASHBOARD_PASSWORD }}
+          WAHA_SWAGGER_PASSWORD=\${WAHA_SWAGGER_PASSWORD}
           
-          TRAEFIK_NETWORK=web
-          LETSENCRYPT_EMAIL=admin@${{ env.DOMAIN }}
+          TRAEFIK_NETWORK=traefik_network
+          LETSENCRYPT_EMAIL=${{ secrets.SHARED_LETSENCRYPT_EMAIL }}
           
-          TZ=Europe/Madrid
+          TZ=America/Bogota
           DEFAULT_LOCALE=es
           ENVFILE
           EOF
       
       - name: 🔄 Deploy application
         run: |
-          SSH_USER="${{ secrets[format('{0}_SSH_USER', github.event.inputs.cliente)] }}"
-          SERVER_HOST="${{ secrets[format('{0}_SERVER_HOST', github.event.inputs.cliente)] }}"
+          CLIENTE_LOWER=$(echo "${{ github.event.inputs.cliente }}" | tr '[:upper:]' '[:lower:]')
+          DEPLOY_DIR="${{ env.DEPLOY_BASE }}/kaptia-${CLIENTE_LOWER}"
+          BACKUP_DIR="${{ env.BACKUP_BASE }}/kaptia-${CLIENTE_LOWER}"
           
-          ssh ${SSH_USER}@${SERVER_HOST} << 'EOF'
+          ssh ${{ secrets.SHARED_SSH_USER }}@${{ secrets.SHARED_SERVER_HOST }} << EOF
             set -e
             
             # Colores
@@ -114,56 +120,62 @@ jobs:
             BLUE='\033[0;34m'
             NC='\033[0m'
             
-            echo -e "${BLUE}Starting deployment...${NC}"
+            echo -e "\${BLUE}Starting deployment for ${CLIENTE_LOWER}...\${NC}"
             
             # Preparar directorio
-            echo -e "${BLUE}Preparing deployment directory...${NC}"
-            sudo mkdir -p ${{ env.DEPLOY_DIR }}
-            sudo mkdir -p ${{ env.BACKUP_DIR }}
-            cd ${{ env.DEPLOY_DIR }}
+            echo -e "\${BLUE}Preparing deployment directory...\${NC}"
+            sudo mkdir -p ${DEPLOY_DIR}
+            sudo mkdir -p ${BACKUP_DIR}
+            cd ${DEPLOY_DIR}
             
             # Copiar nuevo .env primero (antes del backup)
-            sudo cp /tmp/kaptia.env ${{ env.DEPLOY_DIR }}/.env
-            sudo chmod 600 ${{ env.DEPLOY_DIR }}/.env
+            sudo cp /tmp/kaptia.env ${DEPLOY_DIR}/.env
+            sudo chmod 600 ${DEPLOY_DIR}/.env
             
             # Crear backup si existe instalación previa
-            if [ -f "${{ env.DEPLOY_DIR }}/docker-compose.yml" ]; then
-              echo -e "${BLUE}Creating backup...${NC}"
-              BACKUP_FILE="${{ env.BACKUP_DIR }}/backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+            if [ -f "${DEPLOY_DIR}/docker-compose.yml" ]; then
+              echo -e "\${BLUE}Creating backup...\${NC}"
+              BACKUP_FILE="${BACKUP_DIR}/backup_\$(date +%Y%m%d_%H%M%S).tar.gz"
               
               # Detener contenedores y ELIMINAR volúmenes (instalación fresca)
               sudo docker compose down -v
               
               # Backup de archivos (excluyendo .env nuevo)
-              sudo tar -czf "$BACKUP_FILE" \
+              sudo tar -czf "\$BACKUP_FILE" \
                 --exclude='*.log' \
                 --exclude='node_modules' \
                 --exclude='.env' \
                 .
-              echo -e "${GREEN}✓ Backup created: $BACKUP_FILE${NC}"
+              echo -e "\${GREEN}✓ Backup created: \$BACKUP_FILE\${NC}"
             fi
             
             # Extraer aplicación
-            echo -e "${BLUE}Extracting application files...${NC}"
-            sudo tar -xzf /tmp/kaptia-app.tar.gz -C ${{ env.DEPLOY_DIR }}
+            echo -e "\${BLUE}Extracting application files...\${NC}"
+            sudo tar -xzf /tmp/kaptia-app.tar.gz -C ${DEPLOY_DIR}
+            
+            # Crear directorios con permisos correctos (para n8n y waha)
+            echo -e "\${BLUE}Creating data directories with correct permissions...\${NC}"
+            sudo mkdir -p ${DEPLOY_DIR}/n8n_data ${DEPLOY_DIR}/waha_data
+            sudo chown -R 1000:1000 ${DEPLOY_DIR}/n8n_data ${DEPLOY_DIR}/waha_data
+            sudo chmod -R 755 ${DEPLOY_DIR}/n8n_data ${DEPLOY_DIR}/waha_data
             
             # Pull imágenes
-            echo -e "${BLUE}Pulling Docker images...${NC}"
+            echo -e "\${BLUE}Pulling Docker images...\${NC}"
             sudo docker compose pull
             
             # Desplegar
-            echo -e "${BLUE}Deploying application...${NC}"
+            echo -e "\${BLUE}Deploying application...\${NC}"
             sudo docker compose up -d --remove-orphans
             
             # Verificar estado
-            echo -e "${BLUE}Checking container status...${NC}"
+            echo -e "\${BLUE}Checking container status...\${NC}"
             sleep 10
             sudo docker compose ps
             
             # Limpiar
             rm -f /tmp/kaptia-app.tar.gz
             
-            echo -e "${GREEN}✓ Deployment completed successfully!${NC}"
+            echo -e "\${GREEN}✓ Deployment completed successfully for ${CLIENTE_LOWER}!\${NC}"
           EOF
       
       - name: 🏥 Health check

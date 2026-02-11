@@ -1,115 +1,123 @@
-# 🏠 Kaptia
+# 🏠 Kaptia - Multi-tenant CRM
 
-Sistema de captación inmobiliaria con CRM, automatización y WhatsApp.
+CRM con WhatsApp, automatización y base de datos. Deployment automático vía GitHub Actions.
 
-**Componentes:** Chatwoot (CRM) • n8n (Automatización) • NocoDB • WAHA (WhatsApp) • PostgreSQL • Redis • Traefik
+**Stack:** Chatwoot • n8n • NocoDB • WAHA • PostgreSQL • Redis • Traefik
 
-## 📁 Estructura
+---
 
-```
-kaptia/
-├── infrastructure/     # Setup del servidor (una vez)
-├── app/               # Aplicación (docker-compose + scripts)
-├── deploy/            # Scripts de deployment
-└── .github/           # GitHub Actions CI/CD
-```
+## 🚀 Quick Start
 
-## 🚀 Instalación
-
-### Opción 1: CI/CD Automático (Recomendado para tus servidores)
-
-**1. Preparar servidor:**
+### 1. Preparar servidor (una vez)
 ```bash
-sudo bash infrastructure/server-setup.sh
+ssh root@tu-servidor
+bash <(curl -s https://raw.githubusercontent.com/tu-repo/kaptia/main/infrastructure/server-setup.sh)
 ```
 
-**2. Configurar GitHub Secrets:**
-```
-Settings > Secrets > Actions
-
-Por cada cliente, crea estos secrets con el prefijo del cliente:
-
-# Conexión SSH
-PRIMEHOUSING_SSH_PRIVATE_KEY
-PRIMEHOUSING_SSH_USER
-PRIMEHOUSING_SERVER_HOST
-
-# Configuración básica
-PRIMEHOUSING_PROJECT_NAME          # ej: primehousing
-PRIMEHOUSING_DOMAIN                # ej: primehousing.es
-
-# Base de datos
-PRIMEHOUSING_POSTGRES_PASSWORD     # Generar con: openssl rand -base64 32
-
-# Chatwoot
-PRIMEHOUSING_CHATWOOT_SECRET_KEY_BASE  # Generar con: openssl rand -hex 64
-
-# WAHA (WhatsApp)
-PRIMEHOUSING_WAHA_API_KEY_PLAIN        # Generar con: openssl rand -base64 32
-PRIMEHOUSING_WAHA_DASHBOARD_PASSWORD   # Generar con: openssl rand -base64 16
-```
-
-**3. Deploy automático:**
+### 2. Configurar Traefik (una vez)
 ```bash
-# Deploy manual desde GitHub UI:
-Actions > Deploy to Production > Run workflow
-Selecciona el cliente (CLIENTE1, CLIENTE2, MISERVIDOR)
+cd /opt/traefik
+bash setup-traefik.sh
 ```
 
-### Opción 2: Manual (Para servidor del cliente)
+### 3. Secrets en GitHub
 
-**1. Preparar servidor:**
+#### Compartidos (configurar 1 vez):
+```
+SHARED_SSH_PRIVATE_KEY       # Tu clave SSH privada
+SHARED_SSH_USER              # root
+SHARED_SERVER_HOST           # IP del servidor
+SHARED_LETSENCRYPT_EMAIL     # tu@email.com
+```
+
+#### Por cliente (4 secrets):
 ```bash
-cd /opt
-sudo git clone <repo-url> kaptia
-cd kaptia
-sudo bash infrastructure/server-setup.sh
+# Generar valores
+./generate-secrets.sh CLIENTE1
+
+# Crear en GitHub:
+CLIENTE1_PROJECT_NAME              # cliente1
+CLIENTE1_DOMAIN                    # cliente1.com
+CLIENTE1_POSTGRES_PASSWORD         # (del script)
+CLIENTE1_CHATWOOT_SECRET_KEY_BASE  # (del script)
 ```
 
-**2. Configurar app:**
-```bash
-cd app
-cp env.example .env
-nano .env  # Editar con tus valores
-```
+### 4. Deploy
 
-**3. Desplegar:**
-```bash
-./setup.sh  # Script interactivo
-# O manual: docker compose up -d && ./auto-config.sh
-```
+1. GitHub Actions → "🚀 Deploy to Production"
+2. Seleccionar cliente → Run workflow
 
-## 🔑 Generar Credenciales
+**Dominios auto-generados:**
+- `crm.cliente1.com` - Chatwoot
+- `n8n.cliente1.com` - Automatización
+- `waha.cliente1.com` - WhatsApp API
+- `db.cliente1.com` - NocoDB
+
+---
+
+## 📦 Agregar nuevo cliente
+
+1. **Configurar DNS:** 4 subdominios → IP servidor
+2. **Agregar a workflow:** Editar `.github/workflows/deploy.yml` línea 10
+3. **Generar secrets:** `./generate-secrets.sh CLIENTE2`
+4. **Crear 4 secrets** en GitHub
+5. **Deploy:** GitHub Actions → Seleccionar cliente
+
+---
+
+## 🔧 Comandos útiles
 
 ```bash
-openssl rand -hex 64  # CHATWOOT_SECRET_KEY_BASE
-openssl rand -base64 32 | tr -d "=+/" | cut -c1-25  # Contraseñas
-echo -n "tu_key" | sha512sum | cut -d' ' -f1  # WAHA hash
-```
+# Ver contenedores
+docker ps
 
-## 🔄 Operaciones
+# Logs de un cliente
+cd /opt/kaptia-cliente1
+docker compose logs -f chatwoot_web
 
-```bash
-# Estado
+# Reiniciar servicios
+docker compose restart
+
+# Ver estado
 docker compose ps
-./monitor.sh
-
-# Logs
-docker compose logs -f
-
-# Backup
-./backup.sh
-
-# Actualizar
-git push origin main  # Con CI/CD
-./update.sh  # Manual
 ```
 
-## GitHub Actions
+---
 
-**Workflows incluidos:**
-- `deploy.yml` - Deploy automático (push a main)
-- `validate.yml` - Validación en PRs
-- `rollback.yml` - Rollback manual
+## 📂 Estructura
 
-**Secrets requeridos:** Ver ejemplo en [.github/workflows/deploy.yml](.github/workflows/deploy.yml)
+```
+/opt/
+├── traefik/              # Proxy compartido
+├── kaptia-cliente1/      # Instancia cliente 1
+├── kaptia-cliente2/      # Instancia cliente 2
+└── kaptia-clienteN/      # Instancia cliente N
+```
+
+Cada instancia es completamente independiente.
+
+---
+
+## 🆘 Troubleshooting
+
+**Contenedor no inicia:**
+```bash
+cd /opt/kaptia-cliente1
+docker compose down && docker compose up -d
+docker compose logs -f
+```
+
+**SSL no funciona:**
+```bash
+# Verificar DNS
+nslookup crm.cliente1.com
+
+# Ver logs Traefik
+docker logs traefik
+```
+
+**Error de permisos:**
+```bash
+sudo chown -R 1000:1000 /opt/kaptia-cliente1/n8n_data
+sudo chown -R 1000:1000 /opt/kaptia-cliente1/waha_data
+```

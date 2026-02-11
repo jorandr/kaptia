@@ -90,7 +90,19 @@ print_info "Copiando archivos de la aplicación..."
 # En GitHub Actions, esto ya está hecho por el checkout
 
 # =============================================================================
-# 5. VERIFICAR ARCHIVO .env
+# 5. CREAR DIRECTORIOS CON PERMISOS CORRECTOS
+# =============================================================================
+print_info "Creando directorios para volúmenes..."
+
+# Crear directorios para n8n y waha con permisos para UID 1000 (usuario node)
+sudo mkdir -p "$DEPLOY_DIR/n8n_data" "$DEPLOY_DIR/waha_data"
+sudo chown -R 1000:1000 "$DEPLOY_DIR/n8n_data" "$DEPLOY_DIR/waha_data"
+sudo chmod -R 755 "$DEPLOY_DIR/n8n_data" "$DEPLOY_DIR/waha_data"
+
+print_success "Directorios creados con permisos correctos"
+
+# =============================================================================
+# 6. VERIFICAR ARCHIVO .env
 # =============================================================================
 print_info "Verificando configuración..."
 
@@ -103,7 +115,7 @@ fi
 print_success "Archivo .env encontrado"
 
 # =============================================================================
-# 6. PULL DE IMÁGENES
+# 7. PULL DE IMÁGENES
 # =============================================================================
 print_info "Descargando imágenes Docker..."
 
@@ -112,7 +124,7 @@ docker compose pull
 print_success "Imágenes actualizadas"
 
 # =============================================================================
-# 7. DEPLOYMENT
+# 8. DEPLOYMENT
 # =============================================================================
 print_info "Desplegando aplicación..."
 
@@ -121,7 +133,7 @@ docker compose up -d --remove-orphans
 print_success "Aplicación desplegada"
 
 # =============================================================================
-# 8. VERIFICAR SALUD DE CONTENEDORES
+# 9. VERIFICAR SALUD DE CONTENEDORES
 # =============================================================================
 print_info "Verificando estado de contenedores..."
 
