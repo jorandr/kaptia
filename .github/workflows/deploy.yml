@@ -9,8 +9,7 @@ on:
         type: choice
         options:
           - PRIMEHOUSING
-          - CLIENTE2
-          - CLIENTE3
+          - CMGESTION
 
 env:
   # Directorio base se construye dinámicamente por cliente
